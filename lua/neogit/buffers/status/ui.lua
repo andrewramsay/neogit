@@ -211,6 +211,8 @@ local RebaseSection = Component.new(function(props)
 end)
 
 local SectionItemFile = function(section, config)
+  local last_untracked_day = nil
+
   return Component.new(function(item)
     local load_diff = function(item)
       ---@param this Component
@@ -326,13 +328,32 @@ local SectionItemFile = function(section, config)
       submodule = text.highlight("NeogitTagName")(submodule_text)
     end
 
-    return col.tag("Item")({
+    local timestamp = text("")
+    local day_separator
+    if section == "untracked" then
+      local stat = vim.loop.fs_stat(item.absolute_path)
+      if stat then
+        local mtime = stat.mtime.sec
+        timestamp = text.highlight("NeogitSubtleText")(
+          (" (modified at %s)"):format(os.date("%Y-%m-%d %H:%M:%S", mtime))
+        )
+
+        local day = os.date("%Y-%m-%d", mtime)
+        if last_untracked_day and day ~= last_untracked_day then
+          day_separator = EmptyLine()
+        end
+        last_untracked_day = day
+      end
+    end
+
+    local item_node = col.tag("Item")({
       row {
         text.highlight(highlight)(mode_text),
         text(name),
         text.highlight("NeogitSubtleText")(unmerged_types[item.mode] or ""),
         file_mode_change,
         submodule,
+        timestamp,
       },
     }, {
       foldable = true,
@@ -344,6 +365,12 @@ local SectionItemFile = function(section, config)
       filename = item.name,
       item = item,
     })
+
+    if day_separator then
+      return col({ day_separator, item_node })
+    else
+      return item_node
+    end
   end)
 end
 

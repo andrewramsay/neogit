@@ -209,6 +209,14 @@ local function update_status(state, filter)
       end
     end
   end
+
+  table.sort(state.untracked.items, function(a, b)
+    local a_stat = vim.loop.fs_stat(a.absolute_path)
+    local b_stat = vim.loop.fs_stat(b.absolute_path)
+    local a_mtime = a_stat and a_stat.mtime.sec or 0
+    local b_mtime = b_stat and b_stat.mtime.sec or 0
+    return a_mtime > b_mtime
+  end)
 end
 
 ---@class NeogitGitStatus
