@@ -19,7 +19,9 @@ local function parse_branches(branches, include_current)
   local ref = " %-> "
   local detached = "^%(HEAD detached at %x%x%x%x%x%x%x"
   local no_branch = "^%(no branch,"
-  local pattern = include_current and "^[* ] (.+)" or "^  (.+)"
+  -- `git branch` prefixes the current branch with "*", branches checked out in another worktree with "+", and
+  -- all other branches with a space.
+  local pattern = include_current and "^[*+ ] (.+)" or "^[+ ] (.+)"
 
   for _, b in ipairs(branches) do
     local branch_name = b:match(pattern)
@@ -66,7 +68,7 @@ function M.list_related_branches(relation, commit, ...)
 
   local branches = {}
   for _, branch in ipairs(result.stdout) do
-    branch = branch:match("^%s*(.-)%s*$")
+    branch = branch:gsub("^[*+] ", ""):match("^%s*(.-)%s*$")
     if branch and not branch:match("^%(HEAD") and not branch:match("^HEAD ->") and branch ~= "" then
       table.insert(branches, branch)
     end
@@ -120,6 +122,12 @@ end
 ---@return boolean
 function M.is_unmerged(branch, base)
   return git.cli.cherry.arg_list({ base or M.base_branch(), branch }).call({ hidden = true }).stdout[1] ~= nil
+end
+
+---@return string|nil
+function M.base_commit()
+  local result = git.cli.reflog.show.args("--no-abbrev", M.current()).call { hidden = true }
+  return vim.split(result.stdout[#result.stdout], " ")[1]
 end
 
 ---@return string|nil
