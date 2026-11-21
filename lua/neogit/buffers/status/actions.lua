@@ -183,10 +183,11 @@ M.v_discard = function(self)
 
                 logger.debug(("Discarding Patch: %s"):format(patch))
 
-                git.index.apply(patch, {
-                  index = section.name == "staged",
-                  reverse = true,
-                })
+                if section.name == "staged" then
+                  git.index.discard_staged_patch(patch, item.name)
+                else
+                  git.index.apply(patch, { reverse = true })
+                end
               end)
             end
           else
@@ -248,11 +249,23 @@ M.v_discard = function(self)
       end
 
       if #staged_files_modified > 0 then
-        local paths = util.map(staged_files_modified, function(item)
-          return item.escaped_path
-        end)
-        git.index.reset(paths)
-        git.index.checkout(paths)
+        local modified, others = {}, {}
+        for _, item in ipairs(staged_files_modified) do
+          if item.mode == "M" then
+            table.insert(modified, item)
+          else
+            table.insert(others, item.escaped_path)
+          end
+        end
+
+        if #modified > 0 then
+          git.index.discard_staged(modified)
+        end
+
+        if #others > 0 then
+          git.index.reset(others)
+          git.index.checkout(others)
+        end
       end
 
       -- TODO: Investigate why, when dropping multiple stashes, the UI doesn't get updated at the end
@@ -474,7 +487,15 @@ end
 M.v_diff_popup = function(self)
   return popups.open("diff", function(p)
     local section = self.buffer.ui:get_selection().section
-    local item = self.buffer.ui:get_yankable_under_cursor()
+    local commits = self.buffer.ui:get_commits_in_selection()
+    ---@type string|string[]|nil
+    local item
+    if #commits > 0 then
+      table.insert(commits, 1, commits[1] .. "~1")
+      item = commits
+    else
+      item = self.buffer.ui:get_yankable_under_cursor()
+    end
     p { section = { name = section and section.name }, item = { name = item } }
   end)
 end
@@ -793,9 +814,8 @@ M.n_yank_selected = function(self)
         yank = git.rev_parse.oid(yank:match("^(stash@{%d+})"))
       end
 
-      yank = string.format("'%s'", yank)
-      vim.cmd.let("@+=" .. yank)
-      vim.cmd.echo(yank)
+      vim.fn.setreg("+", yank)
+      vim.cmd.echo(string.format("%q", yank))
     else
       vim.cmd("echo ''")
     end
@@ -906,8 +926,7 @@ M.n_discard = function(self)
               git.index.reset { selection.item.escaped_path }
               cleanup_items { selection.item }
             elseif selection.item.mode == "M" then
-              git.index.reset { selection.item.escaped_path }
-              git.index.checkout { selection.item.escaped_path }
+              git.index.discard_staged { selection.item }
             elseif selection.item.mode == "R" then
               git.index.reset_HEAD(selection.item.name, selection.item.original_name)
               git.index.checkout { selection.item.original_name }
@@ -921,7 +940,7 @@ M.n_discard = function(self)
               )
             end
           end
-          refresh = { update_diffs = { "staged:" .. selection.item.name } }
+          refresh = { update_diffs = { "*:" .. selection.item.name } }
         end
       elseif section == "stashes" then
         message = ("Discard %q?"):format(selection.item.name)
@@ -956,9 +975,9 @@ M.n_discard = function(self)
       elseif section == "staged" then
         message = "Discard hunk?"
         action = function()
-          git.index.apply(patch, { index = true, reverse = true })
+          git.index.discard_staged_patch(patch, selection.item.name)
         end
-        refresh = { update_diffs = { "staged:" .. selection.item.name } }
+        refresh = { update_diffs = { "*:" .. selection.item.name } }
       end
     else -- Discard Section
       if section == "untracked" then
@@ -999,7 +1018,7 @@ M.n_discard = function(self)
             if item.mode == "N" or item.mode == "A" then
               table.insert(new_files, item)
             elseif item.mode == "M" then
-              table.insert(staged_files_modified, item.escaped_path)
+              table.insert(staged_files_modified, item)
             elseif item.mode == "R" then
               table.insert(staged_files_renamed, item)
             elseif item.mode == "D" then
@@ -1017,8 +1036,7 @@ M.n_discard = function(self)
           end
 
           if #staged_files_modified > 0 then
-            git.index.reset(staged_files_modified)
-            git.index.checkout(staged_files_modified)
+            git.index.discard_staged(staged_files_modified)
           end
 
           if #staged_files_renamed > 0 then

@@ -122,7 +122,12 @@ function M:open()
           p { commits = self.buffer.ui:get_commits_in_selection() }
         end),
         [popups.mapping_for("DiffPopup")] = popups.open("diff", function(p)
-          local items = self.buffer.ui:get_ordered_commits_in_selection()
+          local items = self.buffer.ui:get_commits_in_selection()
+          if #items == 0 then
+            return
+          end
+
+          table.insert(items, 1, items[1] .. "~1")
           p {
             section = { name = "log" },
             item = { name = items },
@@ -192,9 +197,8 @@ function M:open()
         [status_maps["YankSelected"]] = function()
           local yank = self.buffer.ui:get_commit_under_cursor()
           if yank then
-            yank = string.format("'%s'", yank)
-            vim.cmd.let("@+=" .. yank)
-            vim.cmd.echo(yank)
+            vim.fn.setreg("+", yank)
+            vim.cmd.echo(string.format("%q", yank))
           else
             vim.cmd("echo ''")
           end

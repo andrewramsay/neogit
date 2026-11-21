@@ -145,6 +145,7 @@ function M:open(kind)
     active_item_highlight = true,
     on_detach = function()
       Watcher.instance(self.root):unregister(self)
+      self.buffer = nil
 
       if self.prev_autochdir then
         vim.o.autochdir = self.prev_autochdir
@@ -265,6 +266,7 @@ function M:open(kind)
       ["NeogitBranchReset"] = self:deferred_refresh("reset_branch"),
       ["NeogitEditorClosed"] = self:deferred_refresh("editor_closed"),
       ["NeogitFetchComplete"] = self:deferred_refresh("fetch"),
+      ["NeogitPullComplete"] = self:deferred_refresh("pull"),
       ["NeogitMerge"] = self:deferred_refresh("merge"),
     },
     autocmds = {

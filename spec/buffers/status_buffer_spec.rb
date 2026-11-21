@@ -84,6 +84,18 @@ RSpec.describe "Status Buffer", :git, :nvim do
     # end
   end
 
+  describe "diffing a visual selection" do
+    it "opens the diff popup for a selected file" do
+      create_file("testfile", "changed\n")
+      nvim.refresh
+      nvim.move_to_line("testfile", after: "Unstaged changes")
+      nvim.keys("Vd")
+
+      expect(nvim.errors).to be_empty
+      expect(nvim.filetype).to eq("NeogitPopup")
+    end
+  end
+
   describe "staging tracked files" do
     before do
       File.write("foo", "original content\n")
@@ -290,6 +302,77 @@ RSpec.describe "Status Buffer", :git, :nvim do
         nvim.keys("Vx") # visual line select file header, discard
         await do
           expect(File.read("foo")).to eq("original\n")
+          expect(`git diff --cached --name-only`.strip).to be_empty
+        end
+      end
+    end
+
+    context "with staged modification and unstaged changes in the same file" do
+      before do
+        File.write("foo", "a\nb\nc\nd\ne\nf\ng\nh\n")
+        git.add("foo")
+        git.commit("initial commit")
+        File.write("foo", "A\nb\nc\nd\ne\nf\ng\nh\n")
+        git.add("foo")
+        File.write("foo", "A\nb\nc\nd\ne\nf\ng\nH\n")
+        nvim.refresh
+      end
+
+      it "keeps the unstaged changes when discarding the file" do
+        nvim.move_to_line("modified   foo", after: "Staged changes")
+        nvim.confirm(true)
+        nvim.keys("x")
+        await do
+          expect(File.read("foo")).to eq("a\nb\nc\nd\ne\nf\ng\nH\n")
+          expect(`git diff --cached --name-only`.strip).to be_empty
+        end
+      end
+
+      it "keeps the unstaged changes when discarding the section" do
+        nvim.move_to_line("Staged changes")
+        nvim.confirm(true)
+        nvim.keys("x")
+        await do
+          expect(File.read("foo")).to eq("a\nb\nc\nd\ne\nf\ng\nH\n")
+          expect(`git diff --cached --name-only`.strip).to be_empty
+        end
+      end
+
+      it "keeps the unstaged changes when discarding a visual selection" do
+        nvim.move_to_line("modified   foo", after: "Staged changes")
+        nvim.confirm(true)
+        nvim.keys("Vx")
+        await do
+          expect(File.read("foo")).to eq("a\nb\nc\nd\ne\nf\ng\nH\n")
+          expect(`git diff --cached --name-only`.strip).to be_empty
+        end
+      end
+
+      it "keeps the unstaged changes when the file name has a space" do
+        File.write("my foo", "a\nb\nc\nd\ne\nf\ng\nh\n")
+        git.add("my foo")
+        git.commit("add my foo")
+        File.write("my foo", "A\nb\nc\nd\ne\nf\ng\nh\n")
+        git.add("my foo")
+        File.write("my foo", "A\nb\nc\nd\ne\nf\ng\nH\n")
+        nvim.refresh
+
+        nvim.move_to_line("modified   my foo", after: "Staged changes")
+        nvim.confirm(true)
+        nvim.keys("x")
+        await do
+          expect(File.read("my foo")).to eq("a\nb\nc\nd\ne\nf\ng\nH\n")
+        end
+      end
+
+      it "keeps the unstaged changes when discarding the hunk" do
+        nvim.move_to_line("modified   foo", after: "Staged changes")
+        nvim.keys("<tab>")
+        nvim.move_to_line("+A")
+        nvim.confirm(true)
+        nvim.keys("x")
+        await do
+          expect(File.read("foo")).to eq("a\nb\nc\nd\ne\nf\ng\nH\n")
           expect(`git diff --cached --name-only`.strip).to be_empty
         end
       end
