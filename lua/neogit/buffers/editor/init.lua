@@ -166,8 +166,8 @@ function M:open(kind)
         vim.fn.matchadd("NeogitRemote", git.branch.upstream(), 100)
       end
 
-      -- The diff buffer can't render if there are too many files
-      if self.show_diff and kind ~= "floating" and #git.repo.state.staged.items < 10 then
+      -- Always show the diff regardless of number of files modified
+      if self.show_diff and kind ~= "floating" then
         logger.debug("[EDITOR] Opening Diffview for staged changes")
         self.diff_view = DiffViewBuffer:new("Staged Changes"):open()
       end
